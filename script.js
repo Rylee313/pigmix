@@ -13,7 +13,8 @@ const images = [
     'https://i.imgur.com/m8hoi5S.png'  // Starry Eye
 ];
 let materials = [];
-let currentMaterial;
+let currentMaterial = createMaterial();
+let dropSpeed = 2;
 
 function loadImage(src) {
     const img = new Image();
@@ -27,7 +28,7 @@ function createMaterial() {
     return {
         x: Math.floor(Math.random() * (canvas.width / grid)) * grid,
         y: 0,
-        type: 0
+        type: Math.floor(Math.random() * 5) // Random type from 0 to 4
     };
 }
 
@@ -50,18 +51,21 @@ function moveMaterial(offsetX) {
 }
 
 function update() {
-    if (!currentMaterial) {
-        currentMaterial = createMaterial();
-    } else {
-        currentMaterial.y += grid;
-        if (currentMaterial.y >= canvas.height) {
+    if (currentMaterial) {
+        currentMaterial.y += dropSpeed;
+        if (currentMaterial.y >= canvas.height - grid || isOccupied(currentMaterial.x, currentMaterial.y + grid)) {
             materials.push(currentMaterial);
-            currentMaterial = null;
+            currentMaterial = createMaterial();
         }
     }
 
     checkCombinations();
     drawMaterials();
+    requestAnimationFrame(update);
+}
+
+function isOccupied(x, y) {
+    return materials.some(material => material.x === x && material.y === y);
 }
 
 function checkCombinations() {
@@ -91,8 +95,6 @@ function checkCombinations() {
     }
 }
 
-setInterval(update, 1000);
-
 document.addEventListener('keydown', (event) => {
     if (event.key === 'ArrowLeft') {
         moveMaterial(-grid);
@@ -109,3 +111,5 @@ canvas.addEventListener('touchstart', (event) => {
         moveMaterial(grid);
     }
 });
+
+update();
