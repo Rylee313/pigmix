@@ -28,7 +28,7 @@ function createMaterial() {
     return {
         x: Math.floor(Math.random() * (canvas.width / grid)) * grid,
         y: 0,
-        type: Math.floor(Math.random() * 5) // Random type from 0 to 4
+        type: Math.floor(Math.random() * 3) // Random type from 0 to 2
     };
 }
 
