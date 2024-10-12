@@ -1,115 +1,230 @@
 const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-canvas.width = 300;
-canvas.height = 500;
+const context = canvas.getContext('2d');
 
-const grid = 50;
-const images = [
-    'https://i.imgur.com/339wcBE.png', // Fertilizer
-    'https://i.imgur.com/llcQlqI.png', // Green Head
-    'https://i.imgur.com/UaSzf5z.png', // Clown
-    'https://i.imgur.com/C0QUUdq.png', // Pig Head
-    'https://i.imgur.com/C9A5LoF.png', // Big Pig
-    'https://i.imgur.com/m8hoi5S.png'  // Starry Eye
-];
-let materials = [];
-let currentMaterial = createMaterial();
-let dropSpeed = 2;
+const pigImage = new Image();
+pigImage.src = 'https://i.imgur.com/C0QUUdq.png';
 
-function loadImage(src) {
-    const img = new Image();
-    img.src = src;
-    return img;
-}
+const lifeImage = new Image();
+lifeImage.src = 'https://i.imgur.com/C9A5LoF.png';
 
-const loadedImages = images.map(loadImage);
+const bombImage = new Image();
+bombImage.src = 'https://i.imgur.com/339wcBE.png';
 
-function createMaterial() {
-    return {
-        x: Math.floor(Math.random() * (canvas.width / grid)) * grid,
-        y: 0,
-        type: Math.floor(Math.random() * 3) // Random type from 0 to 2
+const player = {
+    x: 50,
+    y: window.innerHeight / 2 - 25,
+    width: 50,
+    height: 50
+};
+
+let obstacles = [];
+let movingObstacles = [];
+let bombs = [];
+const obstacleWidth = 50;
+let gameSpeed = 2;
+let score = 0;
+let combo = 1;
+let lives = 9;
+let animationFrameId;
+let difficultyMultiplier = 1;
+
+window.onload = () => {
+    resizeCanvas();
+    pigImage.onload = () => {
+        document.getElementById('difficulty').style.display = 'block';
     };
+};
+
+window.addEventListener('resize', resizeCanvas);
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
 
-function drawMaterial(material) {
-    ctx.drawImage(loadedImages[material.type], material.x, material.y, grid, grid);
+function startGame(speed) {
+    gameSpeed = speed;
+    document.getElementById('difficulty').style.display = 'none';
+    canvas.style.display = 'block';
+    if (speed === 6) {
+        difficultyMultiplier = 2;
+    }
+    loop();
 }
 
-function drawMaterials() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    materials.forEach(drawMaterial);
-    if (currentMaterial) drawMaterial(currentMaterial);
-}
-
-function moveMaterial(offsetX) {
-    if (currentMaterial) {
-        currentMaterial.x += offsetX;
-        if (currentMaterial.x < 0) currentMaterial.x = 0;
-        if (currentMaterial.x > canvas.width - grid) currentMaterial.x = canvas.width - grid;
+function createObstacle() {
+    const numBlocks = Math.floor(Math.random() * 5) + 3;
+    const blockHeight = 20;
+    const gap = Math.random() * (canvas.height - 200) + 50;
+    
+    for (let i = 0; i < numBlocks; i++) {
+        obstacles.push({
+            x: canvas.width,
+            y: gap + i * blockHeight,
+            width: obstacleWidth,
+            height: blockHeight
+        });
     }
 }
 
-function update() {
-    if (currentMaterial) {
-        currentMaterial.y += dropSpeed;
-        if (currentMaterial.y >= canvas.height - grid || isOccupied(currentMaterial.x, currentMaterial.y + grid)) {
-            materials.push(currentMaterial);
-            currentMaterial = createMaterial();
-        }
-    }
-
-    checkCombinations();
-    drawMaterials();
-    requestAnimationFrame(update);
-}
-
-function isOccupied(x, y) {
-    return materials.some(material => material.x === x && material.y === y);
-}
-
-function checkCombinations() {
-    const positions = {};
-    materials.forEach(material => {
-        const key = `${material.x},${material.y}`;
-        if (!positions[key]) positions[key] = [];
-        positions[key].push(material);
+function createMovingObstacle() {
+    const height = 50;
+    movingObstacles.push({
+        x: canvas.width,
+        y: Math.random() * (canvas.height - height),
+        width: obstacleWidth,
+        height: height,
+        direction: Math.random() < 0.5 ? 1 : -1
     });
+}
 
-    for (const key in positions) {
-        if (positions[key].length >= 3) {
-            const type = positions[key][0].type;
-            const x = positions[key][0].x;
-            const y = positions[key][0].y;
+function createBomb() {
+    const size = 30;
+    bombs.push({
+        x: canvas.width,
+        y: Math.random() * (canvas.height - size),
+        width: size,
+        height: size
+    });
+}
 
-            if (type < 4) {
-                materials = materials.filter(m => !positions[key].includes(m));
-                materials.push({ x, y, type: type + 1 });
-            } else if (type === 4) { // Big Pig to Starry Eye
-                materials = materials.filter(m => !positions[key].includes(m));
-                materials.push({ x, y, type: 5 });
-            } else if (type === 5) { // Starry Eye elimination
-                materials = materials.filter(m => !positions[key].includes(m));
-            }
+function updateObstacles() {
+    obstacles = obstacles.filter(obs => {
+        obs.x -= gameSpeed;
+        if (checkCollision(player, obs)) {
+            score += 10 * combo;
+            combo++;
+            return false;
         }
+        return obs.x + obs.width >= 0;
+    });
+}
+
+function updateMovingObstacles() {
+    movingObstacles = movingObstacles.filter(obs => {
+        obs.x -= gameSpeed;
+        obs.y += obs.direction * 2;
+        if (obs.y <= 0 || obs.y + obs.height >= canvas.height) {
+            obs.direction *= -1;
+        }
+        if (checkCollision(player, obs)) {
+            lives--;
+            combo = 1;
+            if (lives <= 0) {
+                endGame();
+            }
+            return false;
+        }
+        return obs.x + obs.width >= 0;
+    });
+}
+
+function updateBombs() {
+    bombs = bombs.filter(bomb => {
+        bomb.x -= gameSpeed;
+        if (checkCollision(player, bomb)) {
+            lives--;
+            combo = 1;
+            if (lives <= 0) {
+                endGame();
+            }
+            return false;
+        }
+        return bomb.x + bomb.width >= 0;
+    });
+}
+
+function checkCollision(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.width &&
+           rect1.x + rect1.width > rect2.x &&
+           rect1.y < rect2.y + rect2.height &&
+           rect1.y + rect1.height > rect2.y;
+}
+
+function drawPlayer() {
+    context.drawImage(pigImage, player.x, player.y, player.width, player.height);
+}
+
+function drawObstacles() {
+    context.fillStyle = 'gray';
+    obstacles.forEach(obs => context.fillRect(obs.x, obs.y, obs.width, obs.height));
+}
+
+function drawMovingObstacles() {
+    context.fillStyle = 'orange';
+    movingObstacles.forEach(obs => context.fillRect(obs.x, obs.y, obs.width, obs.height));
+}
+
+function drawBombs() {
+    bombs.forEach(bomb => context.drawImage(bombImage, bomb.x, bomb.y, bomb.width, bomb.height));
+}
+
+function drawScore() {
+    context.fillStyle = 'black';
+    context.font = '24px Arial';
+    context.fillText('Score: ' + score, 20, 30);
+    for (let i = 0; i < lives; i++) {
+        context.drawImage(lifeImage, 20 + i * 35, 50, 30, 30);
     }
 }
 
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'ArrowLeft') {
-        moveMaterial(-grid);
-    } else if (event.key === 'ArrowRight') {
-        moveMaterial(grid);
+function loop() {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    drawPlayer();
+    drawObstacles();
+    drawMovingObstacles();
+    drawBombs();
+    drawScore();
+    updateObstacles();
+    updateMovingObstacles();
+    updateBombs();
+
+    if (Math.random() < 0.02 * difficultyMultiplier) {
+        createObstacle();
     }
+
+    if (Math.random() < 0.03 * difficultyMultiplier) {
+        createMovingObstacle();
+    }
+
+    if (Math.random() < 0.01 * difficultyMultiplier) {
+        createBomb();
+    }
+
+    gameSpeed += 0.002 * difficultyMultiplier;
+
+    animationFrameId = requestAnimationFrame(loop);
+}
+
+function endGame() {
+    cancelAnimationFrame(animationFrameId);
+    document.getElementById('gameOver').style.display = 'block';
+    document.getElementById('finalScore').innerText = '最终得分: ' + score;
+}
+
+function restartGame() {
+    score = 0;
+    lives = 9;
+    combo = 1;
+    obstacles = [];
+    movingObstacles = [];
+    bombs = [];
+    document.getElementById('difficulty').style.display = 'block';
+    document.getElementById('restart').style.display = 'none';
+    document.getElementById('gameOver').style.display = 'none';
+    canvas.style.display = 'none';
+}
+
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    player.x = e.clientX - rect.left - player.width / 2;
+    player.y = e.clientY - rect.top - player.height / 2;
 });
 
-canvas.addEventListener('touchstart', (event) => {
-    const touchX = event.touches[0].clientX - canvas.offsetLeft;
-    if (touchX < currentMaterial.x) {
-        moveMaterial(-grid);
-    } else {
-        moveMaterial(grid);
-    }
+canvas.addEventListener('touchmove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    player.x = touch.clientX - rect.left - player.width / 2;
+    player.y = touch.clientY - rect.top - player.height / 2;
+    e.preventDefault();
 });
-
-update();
