@@ -2,14 +2,188 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>合成游戏</title>
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>连连看游戏</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            overflow: hidden;
+        }
+        #game-board {
+            display: grid;
+            grid-gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tile {
+            width: 50px;
+            height: 50px;
+            background-color: #fff;
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .tile img {
+            width: 100%;
+            height: 100%;
+        }
+        .tile:hover {
+            background-color: #ddd;
+        }
+        #timer, #score {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        #options {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 18px;
+        }
+    </style>
 </head>
 <body>
-    <div id="game">
-        <canvas id="gameCanvas"></canvas>
+    <audio id="background-music" loop>
+        <source src="background.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="match-sound">
+        <source src="match.mp3" type="audio/mpeg">
+    </audio>
+    <audio id="complete-sound">
+        <source src="complete.mp3" type="audio/mpeg">
+    </audio>
+    <div id="timer"></div>
+    <div id="score"></div>
+    <div id="game-board"></div>
+    <div id="options">
+        <button onclick="saveProgress()">保存进度</button>
+        <button onclick="nextLevel()">下一关</button>
+        <button onclick="restartGame()">重新开始</button>
     </div>
-    <script src="script.js"></script>
+    <script>
+        const gameBoard = document.getElementById('game-board');
+        const timerElement = document.getElementById('timer');
+        const scoreElement = document.getElementById('score');
+        const optionsElement = document.getElementById('options');
+        const backgroundMusic = document.getElementById('background-music');
+        const matchSound = document.getElementById('match-sound');
+        const completeSound = document.getElementById('complete-sound');
+        let tiles = [];
+        let firstSelection = null;
+        let level = 1;
+        let timeLimit = 60;
+        let score = 0;
+        const baseIcons = [
+            '🍎', '🍌', '🍇', '🍉', '🍒', '🍊', '🥝', '🍍',
+            '<img src="https://i.imgur.com/C0QUUdq.png" alt="pig">'
+        ];
+
+        function initGame() {
+            const boardSize = 4 + level;
+            const pairCount = Math.floor((boardSize * boardSize) / 2) * 2;
+            const icons = baseIcons.slice(0, Math.min(baseIcons.length, level + 2));
+            gameBoard.style.gridTemplateColumns = `repeat(${boardSize}, 50px)`;
+            tiles = [];
+            gameBoard.innerHTML = '';
+            let iconPairs = [];
+
+            for (let i = 0; i < pairCount / 2; i++) {
+                const icon = icons[i % icons.length];
+                iconPairs.push(icon, icon);
+            }
+
+            iconPairs.sort(() => Math.random() - 0.5);
+
+            for (let i = 0; i < pairCount; i++) {
+                const tile = document.createElement('div');
+                tile.classList.add('tile');
+                tile.innerHTML = iconPairs[i];
+                tile.addEventListener('click', () => handleTileClick(tile));
+                gameBoard.appendChild(tile);
+                tiles.push(tile);
+            }
+
+            startTimer();
+            updateScore();
+            backgroundMusic.play();
+        }
+
+        function handleTileClick(tile) {
+            if (!firstSelection) {
+                firstSelection = tile;
+                tile.style.backgroundColor = '#ddd';
+            } else if (firstSelection !== tile && firstSelection.innerHTML === tile.innerHTML) {
+                tile.style.visibility = 'hidden';
+                firstSelection.style.visibility = 'hidden';
+                firstSelection = null;
+                score += 10;
+                updateScore();
+                matchSound.play();
+            } else {
+                firstSelection.style.backgroundColor = '#fff';
+                firstSelection = null;
+            }
+
+            if (tiles.every(t => t.style.visibility === 'hidden')) {
+                clearInterval(timer);
+                completeSound.play();
+                optionsElement.style.display = 'flex';
+            }
+        }
+
+        function startTimer() {
+            let timeRemaining = timeLimit;
+            timerElement.textContent = `时间: ${timeRemaining}`;
+            clearInterval(timer);
+            timer = setInterval(() => {
+                timeRemaining--;
+                timerElement.textContent = `时间: ${timeRemaining}`;
+                if (timeRemaining <= 0) {
+                    clearInterval(timer);
+                    alert('时间到了！游戏结束。');
+                    restartGame();
+                }
+            }, 1000);
+        }
+
+        function updateScore() {
+            scoreElement.textContent = `分数: ${score}`;
+        }
+
+        function saveProgress() {
+            localStorage.setItem('level', level);
+            localStorage.setItem('score', score);
+            alert('进度已保存！');
+        }
+
+        function nextLevel() {
+            level++;
+            timeLimit = Math.max(timeLimit - 5, 10);
+            optionsElement.style.display = 'none';
+            initGame();
+        }
+
+        function restartGame() {
+            level = 1;
+            score = 0;
+            timeLimit = 60;
+            optionsElement.style.display = 'none';
+            initGame();
+        }
+
+        initGame();
+    </script>
 </body>
 </html>
